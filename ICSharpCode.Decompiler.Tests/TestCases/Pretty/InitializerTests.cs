@@ -34,6 +34,10 @@ namespace ICSharpCode.Decompiler.Tests.TestCases.Pretty.InitializerTests
 		public static void Add<T>(this IList<KeyValuePair<string, string>> collection, string key, T value, Func<T, string> convert = null)
 		{
 		}
+
+		public static void Add(this TestCases collection, string key)
+		{
+		}
 	}
 
 	public class TestCases
@@ -376,12 +380,15 @@ namespace ICSharpCode.Decompiler.Tests.TestCases.Pretty.InitializerTests
 			{ 1, 1, 1 }
 		};
 
-#if CS73
+#if CS73 && !NET40
 		public static ReadOnlySpan<byte> StaticData1 => new byte[1] { 0 };
 
 		public static ReadOnlySpan<byte> StaticData3 => new byte[3] { 1, 2, 3 };
 
 		public static Span<byte> StaticData3Span => new byte[3] { 1, 2, 3 };
+#endif
+#if CS110 && !NET40
+		public static ReadOnlySpan<byte> UTF8Literal => "Hello, world!"u8;
 #endif
 		#endregion
 
@@ -675,6 +682,15 @@ namespace ICSharpCode.Decompiler.Tests.TestCases.Pretty.InitializerTests
 			array[2] = b;
 			array[1] = a;
 			X(Y(), array);
+		}
+
+		public int[] IndicesInWrongOrderConstantsFull()
+		{
+			int[] array = new int[3];
+			array[0] = 0;
+			array[2] = 1;
+			array[1] = 2;
+			return array;
 		}
 
 		public static byte[] ReverseInitializer(int i)
@@ -1090,6 +1106,14 @@ namespace ICSharpCode.Decompiler.Tests.TestCases.Pretty.InitializerTests
 			CustomList<int> customList = new CustomList<int>();
 			customList.Add<int>("int");
 			Console.WriteLine(customList);
+		}
+
+		public static TestCases NoCollectionInitializerBecauseOfMissingIEnumerable()
+		{
+			TestCases testCases = new TestCases();
+			testCases.Add("int");
+			testCases.Add("string");
+			return testCases;
 		}
 
 		public static void CollectionInitializerWithParamsMethod()

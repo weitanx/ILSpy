@@ -15,22 +15,36 @@
 // FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
+#nullable enable
+
 using System;
+using System.Composition;
 
 using ICSharpCode.Decompiler.TypeSystem;
+using ICSharpCode.ILSpy.AppEnv;
 using ICSharpCode.ILSpy.Properties;
+using ICSharpCode.ILSpy.Search;
 using ICSharpCode.ILSpy.TreeNodes;
 
 namespace ICSharpCode.ILSpy
 {
 	[ExportContextMenuEntry(Header = nameof(Resources.ScopeSearchToThisAssembly), Category = nameof(Resources.Analyze), Order = 9999)]
+	[Shared]
 	public class ScopeSearchToAssembly : IContextMenuEntry
 	{
+		private readonly SearchPaneModel searchPane;
+
+		public ScopeSearchToAssembly(SearchPaneModel searchPane)
+		{
+			this.searchPane = searchPane;
+		}
+
 		public void Execute(TextViewContext context)
 		{
-			string asmName = GetAssembly(context);
-			string searchTerm = MainWindow.Instance.SearchPane.SearchTerm;
-			string[] args = NativeMethods.CommandLineToArgumentArray(searchTerm);
+			// asmName cannot be null here, because Execute is only called if IsEnabled/IsVisible return true.
+			string asmName = GetAssembly(context)!;
+			string searchTerm = searchPane.SearchTerm;
+			string[] args = CommandLineTools.CommandLineToArgumentArray(searchTerm);
 			bool replaced = false;
 			for (int i = 0; i < args.Length; i++)
 			{
@@ -47,9 +61,9 @@ namespace ICSharpCode.ILSpy
 			}
 			else
 			{
-				searchTerm = NativeMethods.ArgumentArrayToCommandLine(args);
+				searchTerm = CommandLineTools.ArgumentArrayToCommandLine(args);
 			}
-			MainWindow.Instance.SearchPane.SearchTerm = searchTerm;
+			searchPane.SearchTerm = searchTerm;
 		}
 
 		public bool IsEnabled(TextViewContext context)
@@ -62,10 +76,10 @@ namespace ICSharpCode.ILSpy
 			return GetAssembly(context) != null;
 		}
 
-		string GetAssembly(TextViewContext context)
+		string? GetAssembly(TextViewContext context)
 		{
 			if (context.Reference?.Reference is IEntity entity)
-				return entity.ParentModule.AssemblyName;
+				return entity.ParentModule?.AssemblyName;
 			if (context.SelectedTreeNodes?.Length != 1)
 				return null;
 			switch (context.SelectedTreeNodes[0])
@@ -73,7 +87,7 @@ namespace ICSharpCode.ILSpy
 				case AssemblyTreeNode tn:
 					return tn.LoadedAssembly.ShortName;
 				case IMemberTreeNode member:
-					return member.Member.ParentModule.AssemblyName;
+					return member.Member?.ParentModule?.AssemblyName;
 				default:
 					return null;
 			}

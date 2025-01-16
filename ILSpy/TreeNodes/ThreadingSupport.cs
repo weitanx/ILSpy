@@ -18,6 +18,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Composition;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
@@ -27,9 +28,8 @@ using System.Windows;
 using System.Windows.Threading;
 
 using ICSharpCode.Decompiler;
-using ICSharpCode.ILSpy.Analyzers;
 using ICSharpCode.ILSpy.Properties;
-using ICSharpCode.TreeView;
+using ICSharpCode.ILSpyX.TreeView;
 
 namespace ICSharpCode.ILSpy.TreeNodes
 {
@@ -138,7 +138,7 @@ namespace ICSharpCode.ILSpy.TreeNodes
 				get { return Resources.Loading; }
 			}
 
-			public override FilterResult Filter(FilterSettings settings)
+			public override FilterResult Filter(LanguageSettings settings)
 			{
 				return FilterResult.Match;
 			}
@@ -161,7 +161,7 @@ namespace ICSharpCode.ILSpy.TreeNodes
 				this.text = text;
 			}
 
-			public override FilterResult Filter(FilterSettings settings)
+			public override FilterResult Filter(LanguageSettings settings)
 			{
 				return FilterResult.Match;
 			}
@@ -172,6 +172,7 @@ namespace ICSharpCode.ILSpy.TreeNodes
 		}
 
 		[ExportContextMenuEntry(Header = nameof(Resources.CopyErrorMessage))]
+		[Shared]
 		sealed class CopyErrorMessageContextMenu : IContextMenuEntry
 		{
 			public bool IsVisible(TextViewContext context)

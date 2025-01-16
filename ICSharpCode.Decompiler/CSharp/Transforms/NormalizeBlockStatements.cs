@@ -150,7 +150,7 @@ namespace ICSharpCode.Decompiler.CSharp.Transforms
 				case FixedStatement fxs:
 					return false;
 				case UsingStatement us:
-					return parent is UsingStatement;
+					return parent is UsingStatement && !us.IsEnhanced;
 				default:
 					return !(parent?.Parent is IfElseStatement);
 			}
@@ -218,6 +218,7 @@ namespace ICSharpCode.Decompiler.CSharp.Transforms
 				return;
 			propertyDeclaration.Modifiers |= propertyDeclaration.Getter.Modifiers;
 			propertyDeclaration.ExpressionBody = m.Get<Expression>("expression").Single().Detach();
+			propertyDeclaration.CopyAnnotationsFrom(propertyDeclaration.Getter);
 			propertyDeclaration.Getter.Remove();
 		}
 
@@ -230,6 +231,7 @@ namespace ICSharpCode.Decompiler.CSharp.Transforms
 				return;
 			indexerDeclaration.Modifiers |= indexerDeclaration.Getter.Modifiers;
 			indexerDeclaration.ExpressionBody = m.Get<Expression>("expression").Single().Detach();
+			indexerDeclaration.CopyAnnotationsFrom(indexerDeclaration.Getter);
 			indexerDeclaration.Getter.Remove();
 		}
 	}
