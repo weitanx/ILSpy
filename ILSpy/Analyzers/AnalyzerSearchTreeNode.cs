@@ -18,11 +18,14 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 
 using ICSharpCode.Decompiler.TypeSystem;
 using ICSharpCode.ILSpy.Analyzers.TreeNodes;
 using ICSharpCode.ILSpy.TreeNodes;
+using ICSharpCode.ILSpyX;
+using ICSharpCode.ILSpyX.Analyzers;
 
 namespace ICSharpCode.ILSpy.Analyzers
 {
@@ -55,15 +58,17 @@ namespace ICSharpCode.ILSpy.Analyzers
 		{
 			if (symbol is IEntity)
 			{
-				var context = new AnalyzerContext() {
+				var context = new AnalyzerContext {
 					CancellationToken = ct,
 					Language = Language,
-					AssemblyList = MainWindow.Instance.CurrentAssemblyList
+					AssemblyList = AssemblyList
 				};
-				foreach (var result in analyzer.Analyze(symbol, context))
+				var results = analyzer.Analyze(symbol, context).Select(SymbolTreeNodeFactory);
+				if (context.SortResults)
 				{
-					yield return SymbolTreeNodeFactory(result);
+					results = results.OrderBy(tn => tn.Text?.ToString(), NaturalStringComparer.Instance);
 				}
+				return results;
 			}
 			else
 			{
@@ -81,29 +86,17 @@ namespace ICSharpCode.ILSpy.Analyzers
 			switch (symbol)
 			{
 				case IModule module:
-					return new AnalyzedModuleTreeNode(module) {
-						Language = this.Language
-					};
+					return new AnalyzedModuleTreeNode(module) { };
 				case ITypeDefinition td:
-					return new AnalyzedTypeTreeNode(td) {
-						Language = this.Language
-					};
+					return new AnalyzedTypeTreeNode(td) { };
 				case IField fd:
-					return new AnalyzedFieldTreeNode(fd) {
-						Language = this.Language
-					};
+					return new AnalyzedFieldTreeNode(fd) { };
 				case IMethod md:
-					return new AnalyzedMethodTreeNode(md) {
-						Language = this.Language
-					};
+					return new AnalyzedMethodTreeNode(md) { };
 				case IProperty pd:
-					return new AnalyzedPropertyTreeNode(pd) {
-						Language = this.Language
-					};
+					return new AnalyzedPropertyTreeNode(pd) { };
 				case IEvent ed:
-					return new AnalyzedEventTreeNode(ed) {
-						Language = this.Language
-					};
+					return new AnalyzedEventTreeNode(ed) { };
 				default:
 					throw new ArgumentOutOfRangeException(nameof(symbol), $"Symbol {symbol.GetType().FullName} is not supported.");
 			}

@@ -25,6 +25,7 @@ using ICSharpCode.Decompiler;
 namespace ICSharpCode.ILSpy.TreeNodes
 {
 	using ICSharpCode.Decompiler.TypeSystem;
+	using ICSharpCode.ILSpyX;
 
 	/// <summary>
 	/// Represents a property in the TreeView.
@@ -48,12 +49,12 @@ namespace ICSharpCode.ILSpy.TreeNodes
 
 		public IProperty PropertyDefinition { get; }
 
-		public override object Text => GetText(GetPropertyDefinition(), Language) + PropertyDefinition.MetadataToken.ToSuffixString();
+		public override object Text => GetText(GetPropertyDefinition(), Language) + GetSuffixString(PropertyDefinition);
 
 		private IProperty GetPropertyDefinition()
 		{
-			return ((MetadataModule)PropertyDefinition.ParentModule.PEFile
-				?.GetTypeSystemWithCurrentOptionsOrNull()
+			return ((MetadataModule)PropertyDefinition.ParentModule?.MetadataFile
+				?.GetTypeSystemWithCurrentOptionsOrNull(SettingsService)
 				?.MainModule)?.GetDefinition((PropertyDefinitionHandle)PropertyDefinition.MetadataToken) ?? PropertyDefinition;
 		}
 
@@ -70,11 +71,11 @@ namespace ICSharpCode.ILSpy.TreeNodes
 				MethodTreeNode.GetOverlayIcon(property.Accessibility), property.IsStatic);
 		}
 
-		public override FilterResult Filter(FilterSettings settings)
+		public override FilterResult Filter(LanguageSettings settings)
 		{
 			if (settings.ShowApiLevel == ApiVisibility.PublicOnly && !IsPublicAPI)
 				return FilterResult.Hidden;
-			if (settings.SearchTermMatches(PropertyDefinition.Name) && (settings.ShowApiLevel == ApiVisibility.All || settings.Language.ShowMember(PropertyDefinition)))
+			if (settings.SearchTermMatches(PropertyDefinition.Name) && (settings.ShowApiLevel == ApiVisibility.All || LanguageService.Language.ShowMember(PropertyDefinition)))
 				return FilterResult.Match;
 			else
 				return FilterResult.Hidden;
@@ -103,7 +104,7 @@ namespace ICSharpCode.ILSpy.TreeNodes
 
 		public override string ToString()
 		{
-			return Languages.ILLanguage.PropertyToString(PropertyDefinition, false, false, false);
+			return LanguageService.ILLanguage.PropertyToString(PropertyDefinition, false, false, false);
 		}
 	}
 }

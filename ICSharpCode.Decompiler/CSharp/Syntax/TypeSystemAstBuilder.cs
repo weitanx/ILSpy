@@ -219,6 +219,26 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		/// Controls whether C# 9 "record" class types are supported.
 		/// </summary>
 		public bool SupportRecordClasses { get; set; }
+
+		/// <summary>
+		/// Controls whether C# 10 "record" struct types are supported.
+		/// </summary>
+		public bool SupportRecordStructs { get; set; }
+
+		/// <summary>
+		/// Controls whether C# 11 "operator >>>" is supported.
+		/// </summary>
+		public bool SupportUnsignedRightShift { get; set; }
+
+		/// <summary>
+		/// Controls whether C# 11 "operator checked" is supported.
+		/// </summary>
+		public bool SupportOperatorChecked { get; set; }
+
+		/// <summary>
+		/// Controls whether all fully qualified type names should be prefixed with "global::".
+		/// </summary>
+		public bool AlwaysUseGlobal { get; set; }
 		#endregion
 
 		#region Convert Type
@@ -352,14 +372,9 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 				for (int i = 0; i < fpt.ParameterTypes.Length; i++)
 				{
 					var paramDecl = new ParameterDeclaration();
-					paramDecl.ParameterModifier = fpt.ParameterReferenceKinds[i] switch {
-						ReferenceKind.In => ParameterModifier.In,
-						ReferenceKind.Ref => ParameterModifier.Ref,
-						ReferenceKind.Out => ParameterModifier.Out,
-						_ => ParameterModifier.None,
-					};
+					paramDecl.ParameterModifier = fpt.ParameterReferenceKinds[i];
 					IType parameterType = fpt.ParameterTypes[i];
-					if (paramDecl.ParameterModifier != ParameterModifier.None && parameterType is ByReferenceType brt)
+					if (paramDecl.ParameterModifier != ReferenceKind.None && parameterType is ByReferenceType brt)
 					{
 						paramDecl.Type = ConvertType(brt.ElementType);
 					}
@@ -518,6 +533,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 			{
 				// Handle nested types
 				result.Target = ConvertTypeHelper(genericType.DeclaringType, typeArguments);
+				AddTypeAnnotation(result.Target, genericType.DeclaringType);
 			}
 			else
 			{
@@ -530,7 +546,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 				else
 				{
 					result.Target = ConvertNamespace(genericType.Namespace,
-						out _, genericType.Namespace == genericType.Name);
+						out _, AlwaysUseGlobal || genericType.Namespace == genericType.Name);
 				}
 			}
 			result.MemberName = genericType.Name;
@@ -1149,7 +1165,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 			return true;
 		}
 
-		Dictionary<object, (KnownTypeCode Type, string Member)> specialConstants = new Dictionary<object, (KnownTypeCode Type, string Member)>() {
+		static readonly Dictionary<object, (KnownTypeCode Type, string Member)> specialConstants = new Dictionary<object, (KnownTypeCode Type, string Member)>() {
 			// byte:
 			{ byte.MaxValue, (KnownTypeCode.Byte, "MaxValue") },
 			// sbyte:
@@ -1191,7 +1207,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 
 		bool IsFlagsEnum(ITypeDefinition type)
 		{
-			return type.HasAttribute(KnownAttribute.Flags, inherit: false);
+			return type.HasAttribute(KnownAttribute.Flags);
 		}
 
 		Expression ConvertEnumValue(IType type, long val)
@@ -1628,22 +1644,9 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 			if (parameter == null)
 				throw new ArgumentNullException(nameof(parameter));
 			ParameterDeclaration decl = new ParameterDeclaration();
-			if (parameter.IsRef)
-			{
-				decl.ParameterModifier = ParameterModifier.Ref;
-			}
-			else if (parameter.IsOut)
-			{
-				decl.ParameterModifier = ParameterModifier.Out;
-			}
-			else if (parameter.IsIn)
-			{
-				decl.ParameterModifier = ParameterModifier.In;
-			}
-			else if (parameter.IsParams)
-			{
-				decl.ParameterModifier = ParameterModifier.Params;
-			}
+			decl.ParameterModifier = parameter.ReferenceKind;
+			decl.IsParams = parameter.IsParams;
+			decl.IsScopedRef = parameter.Lifetime.ScopedRef;
 			if (ShowAttributes)
 			{
 				decl.Attributes.AddRange(ConvertAttributes(parameter.GetAttributes()));
@@ -1663,7 +1666,8 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 			{
 				decl.Name = parameter.Name;
 			}
-			if (parameter.IsOptional && parameter.HasConstantValueInSignature && this.ShowConstantValues)
+			if (parameter.IsOptional && decl.ParameterModifier is ReferenceKind.None or ReferenceKind.In or ReferenceKind.RefReadOnly
+				&& parameter.HasConstantValueInSignature && this.ShowConstantValues)
 			{
 				try
 				{
@@ -1718,6 +1722,10 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 				case SymbolKind.Event:
 					return ConvertEvent((IEvent)entity);
 				case SymbolKind.Method:
+					if (entity.Name.Contains(".op_"))
+					{
+						goto case SymbolKind.Operator;
+					}
 					return ConvertMethod((IMethod)entity);
 				case SymbolKind.Operator:
 					return ConvertOperator((IMethod)entity);
@@ -1774,6 +1782,10 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 						{
 							modifiers |= Modifiers.Ref;
 						}
+					}
+					if (SupportRecordStructs && typeDefinition.IsRecord)
+					{
+						classType = ClassType.RecordStruct;
 					}
 					break;
 				case TypeKind.Enum:
@@ -1954,6 +1966,10 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 				decl.AddAnnotation(new MemberResolveResult(null, field));
 			}
 			decl.ReturnType = ConvertType(field.ReturnType);
+			if (decl.ReturnType is ComposedType ct && ct.HasRefSpecifier && field.ReturnTypeIsRefReadOnly)
+			{
+				ct.HasReadOnlySpecifier = true;
+			}
 			Expression initializer = null;
 			if (field.IsConst && this.ShowConstantValues)
 			{
@@ -2195,8 +2211,14 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 
 		EntityDeclaration ConvertOperator(IMethod op)
 		{
-			OperatorType? opType = OperatorDeclaration.GetOperatorType(op.Name);
+			int dot = op.Name.LastIndexOf('.');
+			string name = op.Name.Substring(dot + 1);
+			OperatorType? opType = OperatorDeclaration.GetOperatorType(name);
 			if (opType == null)
+				return ConvertMethod(op);
+			if (opType == OperatorType.UnsignedRightShift && !SupportUnsignedRightShift)
+				return ConvertMethod(op);
+			if (!SupportOperatorChecked && OperatorDeclaration.IsChecked(opType.Value))
 				return ConvertMethod(op);
 
 			OperatorDeclaration decl = new OperatorDeclaration();
@@ -2221,6 +2243,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 				decl.AddAnnotation(new MemberResolveResult(null, op));
 			}
 			decl.Body = GenerateBodyBlock();
+			decl.PrivateImplementationType = GetExplicitInterfaceType(op);
 			return decl;
 		}
 
@@ -2339,8 +2362,14 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 						{
 							m |= Modifiers.Sealed;
 						}
-						if (member.IsAbstract && member.IsStatic)
-							m |= Modifiers.Abstract;
+						if (member.IsStatic)
+						{
+							// modifiers of static members in interfaces:
+							if (member.IsAbstract)
+								m |= Modifiers.Abstract;
+							else if (member.IsVirtual && !member.IsOverride)
+								m |= Modifiers.Virtual;
+						}
 					}
 					else
 					{
